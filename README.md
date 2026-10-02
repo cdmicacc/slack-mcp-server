@@ -110,6 +110,8 @@ Search for users by name, email, or display name. Returns user details and DM ch
 
 > **Note:** For OAuth tokens (`xoxp`/`xoxb`), this tool searches the local users cache using pattern matching. For browser session tokens (`xoxc`/`xoxd`), it uses the Slack edge API for real-time search.
 
+> A query that is a Slack user ID (e.g. `U07VCEPP4N5`) or a single email address is looked up directly instead, via `users.info` or `users.lookupByEmail`, so it works without the users cache (including with `--no-cache`). The email lookup requires the `users:read.email` scope; if no user has that email, the query is searched as above.
+
 - **Parameters:**
   - `query` (string, required): Search query - matches against real name, display name, username, or email.
   - `limit` (number, default: 10): Maximum number of results to return (1-100).

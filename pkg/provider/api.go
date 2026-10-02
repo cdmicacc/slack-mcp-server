@@ -215,6 +215,7 @@ type SlackAPI interface {
 	AuthTestContext(ctx context.Context) (*slack.AuthTestResponse, error)
 	GetUsersContext(ctx context.Context, options ...slack.GetUsersOption) ([]slack.User, error)
 	GetUsersInfo(users ...string) (*[]slack.User, error)
+	GetUserByEmailContext(ctx context.Context, email string) (*slack.User, error)
 	PostMessageContext(ctx context.Context, channel string, options ...slack.MsgOption) (string, string, error)
 	MarkConversationContext(ctx context.Context, channel, ts string) error
 	AddReactionContext(ctx context.Context, name string, item slack.ItemRef) error
@@ -389,6 +390,10 @@ func (c *MCPSlackClient) GetUsersContext(ctx context.Context, options ...slack.G
 
 func (c *MCPSlackClient) GetUsersInfo(users ...string) (*[]slack.User, error) {
 	return c.slackClient.GetUsersInfo(users...)
+}
+
+func (c *MCPSlackClient) GetUserByEmailContext(ctx context.Context, email string) (*slack.User, error) {
+	return c.slackClient.GetUserByEmailContext(ctx, email)
 }
 
 func (c *MCPSlackClient) MarkConversationContext(ctx context.Context, channel, ts string) error {
@@ -1386,9 +1391,16 @@ func (ap *ApiProvider) IsOAuth() bool {
 // slackUserIDPattern matches Slack user IDs (e.g., U07VCEPP4N5, W0123456789).
 var slackUserIDPattern = regexp.MustCompile(`^[UW][A-Z0-9]{2,}$`)
 
+// emailPattern matches a query that is a single email address and nothing else.
+var emailPattern = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
+
 // SearchUsers searches for users by name, email, or display name.
 // If the query matches a Slack user ID pattern (e.g., U07VCEPP4N5), it looks up the user
 // directly via the users.info API instead of searching.
+// If the query is an email address, it looks up the user directly via the
+// users.lookupByEmail API (requires the users:read.email scope); if no user has
+// that email, it falls through to the search below.
+// Both direct lookups work without the users cache, so they also work with --no-cache.
 // For OAuth tokens (xoxp/xoxb), it searches the local users cache using regex matching.
 // For browser tokens (xoxc/xoxd), it uses the edge API's UsersSearch method.
 func (ap *ApiProvider) SearchUsers(ctx context.Context, query string, limit int) ([]slack.User, error) {
@@ -1401,6 +1413,19 @@ func (ap *ApiProvider) SearchUsers(ctx context.Context, query string, limit int)
 			return *users, nil
 		}
 		return nil, nil
+	}
+
+	if emailPattern.MatchString(query) {
+		user, err := ap.client.GetUserByEmailContext(ctx, query)
+		var slackErr slack.SlackErrorResponse
+		switch {
+		case err == nil && user != nil:
+			return []slack.User{*user}, nil
+		case err != nil && !(errors.As(err, &slackErr) && slackErr.Err == "users_not_found"):
+			return nil, err
+		}
+		// No user has this email. It may still match a name or display name,
+		// so fall through to the search below, as before this lookup existed.
 	}
 
 	if ap.IsOAuth() {
