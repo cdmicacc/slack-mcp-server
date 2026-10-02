@@ -94,7 +94,7 @@ func TestUnitSearchUsersByEmail(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	t.Run("a query that only contains an email is still a search", func(t *testing.T) {
+	t.Run("a query that is not a single complete email is searched, not looked up", func(t *testing.T) {
 		for _, query := range []string{"alice", "alice@", "alice @example.com", "email alice@example.com", "@example.com"} {
 			client := &searchUsersClient{}
 			ap := newTestApiProvider(client, &UsersCache{})
